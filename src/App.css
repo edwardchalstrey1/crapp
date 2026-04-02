@@ -50,13 +50,8 @@
 
 .bubble-wrap-area {
   flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-content: flex-start;
-  gap: 1.5rem;
-  padding: 2rem;
-  overflow-y: auto;
+  position: relative;
+  overflow: hidden;
   /* hides scrollbar for cleaner look */
   scrollbar-width: none; 
 }
@@ -66,17 +61,14 @@
 
 /* Bubble physics and glass feel */
 .bubble-container {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  animation: float 6s ease-in-out infinite ease-in-out;
-}
-
-.bubble-container:active {
-  transform: scale(0.9);
+  will-change: transform;
 }
 
 .bubble {
@@ -92,7 +84,11 @@
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   border: 1px solid hsla(var(--hue, 210), 100%, 80%, 0.3);
-  transition: all 0.3s ease-out;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease-out;
+}
+
+.bubble-container:active .bubble {
+  transform: scale(0.9);
 }
 
 .bubble-shine {
@@ -109,7 +105,7 @@
 
 /* Pop state */
 .bubble-container.popped .bubble {
-  transform: scale(0);
+  transform: scale(0) !important;
   opacity: 0;
   transition: transform 0.2s cubic-bezier(0.6, -0.28, 0.735, 0.045), opacity 0.2s ease;
 }
@@ -119,11 +115,6 @@
   font-size: 2.5rem;
   animation: eggReveal 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   pointer-events: none;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
 }
 
 @keyframes eggReveal {

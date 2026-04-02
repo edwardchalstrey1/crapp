@@ -3,7 +3,6 @@ import './App.css';
 
 const EMOJIS = ['💩', '🚽', '🧻', '📱', '💧', '🧼', '🌟', '🦄', '🎉', '🏆'];
 
-// Generate a random daily seed so themed icons could be synchronized across users
 const getDailySeed = () => {
   const d = new Date();
   return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
@@ -13,24 +12,66 @@ function randomInRange(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-function Bubble({ id, onPop }) {
+function Bubble({ id, containerWidth, containerHeight, onPop }) {
   const [popped, setPopped] = useState(false);
   const [easterEgg, setEasterEgg] = useState(null);
+  const bubbleRef = useRef(null);
 
-  // Generate bubble uniqueness
   const size = useRef(randomInRange(60, 100));
-  const hasEasterEgg = useRef(Math.random() > 0.85); // 15% chance
+  const hasEasterEgg = useRef(Math.random() > 0.85);
   const eggContent = useRef(hasEasterEgg.current ? EMOJIS[Math.floor(Math.random() * EMOJIS.length)] : null);
-  const delay = useRef(randomInRange(0, 2));
 
-  // Determine an animation/color characteristic based on ID so not all are identical
   const hue = useRef(randomInRange(200, 260));
+
+  // Physics state
+  const pos = useRef({
+    x: randomInRange(0, Math.max(50, containerWidth - size.current)),
+    y: randomInRange(0, Math.max(50, containerHeight - size.current))
+  });
+  const velocity = useRef({
+    vx: (randomInRange(0.5, 1.5)) * (Math.random() > 0.5 ? 1 : -1),
+    vy: (randomInRange(0.5, 1.5)) * (Math.random() > 0.5 ? 1 : -1)
+  });
+
+  useEffect(() => {
+    let animationFrameId;
+
+    const updatePhysics = () => {
+      let { x, y } = pos.current;
+      let { vx, vy } = velocity.current;
+      const s = size.current;
+
+      x += vx;
+      y += vy;
+
+      if (x <= 0) { x = 0; vx *= -1; }
+      if (x + s >= containerWidth) { x = containerWidth - s; vx *= -1; }
+      if (y <= 0) { y = 0; vy *= -1; }
+      if (y + s >= containerHeight) { y = containerHeight - s; vy *= -1; }
+
+      pos.current = { x, y };
+      velocity.current = { vx, vy };
+
+      if (bubbleRef.current) {
+        // use 3d transform for better hardware acceleration
+        bubbleRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      }
+      
+      // continue animating even if popped, otherwise it freezes awkwardly
+      animationFrameId = requestAnimationFrame(updatePhysics);
+    };
+
+    if (containerWidth > 0 && containerHeight > 0) {
+      animationFrameId = requestAnimationFrame(updatePhysics);
+    }
+    
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [containerWidth, containerHeight]);
 
   useEffect(() => {
     if (popped) {
       const timer = setTimeout(() => {
         setPopped(false);
-        // Maybe change easter egg when it respawns
         hasEasterEgg.current = Math.random() > 0.85;
         eggContent.current = hasEasterEgg.current ? EMOJIS[Math.floor(Math.random() * EMOJIS.length)] : null;
       }, 5000 + randomInRange(2000, 10000));
@@ -40,7 +81,7 @@ function Bubble({ id, onPop }) {
 
   const pop = () => {
     if (popped) return;
-    if (navigator.vibrate) navigator.vibrate(10); // subtle haptic
+    if (navigator.vibrate) navigator.vibrate(10);
     setPopped(true);
     setEasterEgg(eggContent.current);
     if (onPop) onPop(eggContent.current !== null);
@@ -48,17 +89,16 @@ function Bubble({ id, onPop }) {
 
   return (
     <div 
+      ref={bubbleRef}
       className={`bubble-container ${popped ? 'popped' : ''}`}
       style={{
         width: size.current,
         height: size.current,
-        '--hue': hue.current,
-        animationDelay: `${delay.current}s`
+        '--hue': hue.current
       }}
       onClick={pop}
     >
       <div className="bubble">
-        {/* shine effect inside bubble */}
         <div className="bubble-shine" />
       </div>
       {popped && easterEgg && (
@@ -71,9 +111,24 @@ function Bubble({ id, onPop }) {
 function App() {
   const [streak, setStreak] = useState(0);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    // Streak logic
+    const updateDims = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        });
+      }
+    };
+    updateDims();
+    window.addEventListener('resize', updateDims);
+    return () => window.removeEventListener('resize', updateDims);
+  }, []);
+
+  useEffect(() => {
     const todayStr = new Date().toDateString();
     const lastLogin = localStorage.getItem('crappLastLogin');
     let currentStreak = parseInt(localStorage.getItem('crappStreak') || '0', 10);
@@ -86,7 +141,7 @@ function App() {
         if (diffDays === 1) {
           currentStreak++;
         } else if (diffDays > 1) {
-          currentStreak = 1; // broken
+          currentStreak = 1;
         }
       } else {
         currentStreak = 1;
@@ -96,7 +151,6 @@ function App() {
     }
     setStreak(currentStreak);
 
-    // Mock an anonymised leaderboard that moves/updates
     const seed = getDailySeed();
     setLeaderboard([
       { name: 'User' + ((seed * 7) % 9999), streak: currentStreak + 14 },
@@ -117,10 +171,9 @@ function App() {
         </div>
       </header>
 
-      <main className="bubble-wrap-area">
-        {/* Render a grid of bubbles */}
-        {Array.from({ length: 42 }).map((_, i) => (
-          <Bubble key={i} id={i} />
+      <main className="bubble-wrap-area" ref={containerRef}>
+        {dimensions.width > 0 && Array.from({ length: 42 }).map((_, i) => (
+          <Bubble key={i} id={i} containerWidth={dimensions.width} containerHeight={dimensions.height} />
         ))}
       </main>
 
